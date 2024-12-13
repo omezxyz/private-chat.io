@@ -103,14 +103,14 @@
       nickname = nicknameInput.value || 'Anonymous';
       const roomId = roomIdInput.value;
       const password = passwordInput.value;
-      ws.send(JSON.stringify({ type: 'create-room', roomId, password, nickname }));
+      socket.send(JSON.stringify({ type: 'create-room', roomId, password, nickname }));
     };
 
     document.getElementById('join').onclick = () => {
       nickname = nicknameInput.value || 'Anonymous';
       const roomId = roomIdInput.value;
       const password = passwordInput.value;
-      ws.send(JSON.stringify({ type: 'join-room', roomId, password, nickname }));
+      socket.send(JSON.stringify({ type: 'join-room', roomId, password, nickname }));
     };
 
     document.getElementById('send').onclick = () => {
@@ -119,14 +119,14 @@
       if (message) {
         const timestamp = new Date().toLocaleTimeString();
         displayMessage(`You: ${message}`, timestamp);
-        ws.send(JSON.stringify({ type: 'message', roomId, message, nickname }));
+        socket.send(JSON.stringify({ type: 'message', roomId, message, nickname }));
         messageInput.value = '';
       }
     };
 
     messageInput.oninput = () => {
       const roomId = roomIdInput.value;
-      ws.send(JSON.stringify({ type: 'typing', roomId, nickname }));
+      socket.send(JSON.stringify({ type: 'typing', roomId, nickname }));
 
       clearTimeout(typingTimeout);
       typingTimeout = setTimeout(() => {
@@ -134,7 +134,7 @@
       }, 3000);
     };
 
-    ws.onmessage = (event) => {
+    socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.type === 'room-created') {
         alert('Room created successfully! Share the Room ID and password.');
@@ -167,6 +167,6 @@
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
   </script>
-    <footer style="margin: 20px; font: 0.5em ;">Developed by <code>OR</code></footer>
+  <footer style="margin: 20px; font: 0.5em ;">Developed by <code>OR</code></footer>
 </body>
 </html>
