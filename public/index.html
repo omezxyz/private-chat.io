@@ -135,29 +135,37 @@
     };
 
     socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'room-created') {
-        alert('Room created successfully! Share the Room ID and password.');
-      } else if (data.type === 'joined-room') {
-        setupDiv.style.display = 'none';
-        chatDiv.style.display = 'block';
-      } else if (data.type === 'message') {
-        const timestamp = new Date().toLocaleTimeString();
-        if (data.nickname === nickname) {
-          displayMessage(`You: ${data.message}`, timestamp);
-        } else {
-          displayMessage(`${data.nickname}: ${data.message}`, timestamp);
-        }
-      } else if (data.type === 'typing') {
-        typingDiv.innerText = `${data.nickname} is typing...`;
-        clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => {
-          typingDiv.innerText = '';
-        }, 3000);
-      } else if (data.type === 'error') {
-        alert(data.message);
+  const data = JSON.parse(event.data);
+
+  if (data.type === 'room-created') {
+    alert('Room created successfully! Share the Room ID and password.');
+  } else if (data.type === 'joined-room') {
+    setupDiv.style.display = 'none';
+    chatDiv.style.display = 'block';
+  } else if (data.type === 'message') {
+    const timestamp = new Date().toLocaleTimeString();
+    // Check if the message has already been displayed
+    const existingMessages = document.querySelectorAll('.message');
+    const isDuplicate = Array.from(existingMessages).some(message => message.innerText.includes(data.message));
+
+    if (!isDuplicate) {
+      if (data.nickname === nickname) {
+        displayMessage(`You: ${data.message}`, timestamp);
+      } else {
+        displayMessage(`${data.nickname}: ${data.message}`, timestamp);
       }
-    };
+    }
+  } else if (data.type === 'typing') {
+    typingDiv.innerText = `${data.nickname} is typing...`;
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+      typingDiv.innerText = '';
+    }, 3000);
+  } else if (data.type === 'error') {
+    alert(data.message);
+  }
+};
+
 
     function displayMessage(message, timestamp) {
       const messageEl = document.createElement('div');
