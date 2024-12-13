@@ -85,7 +85,8 @@
   </div>
 
   <script>
-    const ws = new WebSocket('ws://localhost:3000');
+    const socket = new WebSocket('wss://private-chat-io.onrender.com'); // Updated to use Render's URL
+
     const setupDiv = document.getElementById('setup');
     const chatDiv = document.getElementById('chat');
     const messagesDiv = document.getElementById('messages');
