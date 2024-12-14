@@ -1,74 +1,131 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
+const fs = require('fs');
+const path = require('path');
 
-// Create an Express app
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// In-memory storage for chat rooms
-const chatRooms = {};
+// Persistent storage file
+const ROOMS_FILE = path.join(__dirname, 'rooms.json');
 
-// Serve static files from the "public" directory
+// Load or initialize chat rooms
+let chatRooms = {};
+if (fs.existsSync(ROOMS_FILE)) {
+  try {
+    chatRooms = JSON.parse(fs.readFileSync(ROOMS_FILE, 'utf8')) || {};
+  } catch (error) {
+    console.error('Error reading rooms file:', error.message);
+  }
+}
+
+// Save chat rooms to file
+const saveRoomsToFile = () => {
+  try {
+    fs.writeFileSync(ROOMS_FILE, JSON.stringify(chatRooms, null, 2));
+  } catch (error) {
+    console.error('Error saving rooms file:', error.message);
+  }
+};
+
+// Serve static files
 app.use(express.static('public'));
 
-// WebSocket server
 wss.on('connection', (ws) => {
   ws.on('message', (message) => {
-    const data = JSON.parse(message);
+    try {
+      const data = JSON.parse(message);
 
-    if (data.type === 'create-room') {
-      const { roomId, password, nickname } = data;
+      if (data.type === 'create-room') {
+        const { roomId, password, nickname } = data;
 
-      if (!chatRooms[roomId]) {
-        chatRooms[roomId] = { password, clients: [] };
+        if (!chatRooms[roomId]) {
+          chatRooms[roomId] = {
+            password,
+            creator: nickname,
+            clients: [],
+          };
+          saveRoomsToFile();
+        }
+
         ws.nickname = nickname || 'Anonymous';
         ws.roomId = roomId;
         chatRooms[roomId].clients.push(ws);
 
         ws.send(JSON.stringify({ type: 'room-created', roomId }));
-      } else {
-        ws.send(JSON.stringify({ type: 'error', message: 'Room already exists' }));
-      }
-    } else if (data.type === 'join-room') {
-      const { roomId, password, nickname } = data;
+        broadcastOnlineUsers(roomId);
+      } else if (data.type === 'join-room') {
+        const { roomId, password, nickname } = data;
 
-      if (chatRooms[roomId] && chatRooms[roomId].password === password) {
-        ws.nickname = nickname || 'Anonymous';
-        ws.roomId = roomId;
-        chatRooms[roomId].clients.push(ws);
+        if (chatRooms[roomId] && chatRooms[roomId].password === password) {
+          ws.nickname = nickname || 'Anonymous';
+          ws.roomId = roomId;
+          chatRooms[roomId].clients.push(ws);
 
-        ws.send(JSON.stringify({ type: 'joined-room', roomId }));
-      } else {
-        ws.send(JSON.stringify({ type: 'error', message: 'Invalid room or password' }));
-      }
-    } else if (data.type === 'message') {
-      const { roomId, message } = data;
+          ws.send(JSON.stringify({ type: 'joined-room', roomId }));
+          broadcastOnlineUsers(roomId);
+        } else {
+          ws.send(JSON.stringify({ type: 'error', message: 'Invalid room or password' }));
+        }
+      } else if (data.type === 'message') {
+        const { roomId, message } = data;
 
-      if (chatRooms[roomId]) {
-        chatRooms[roomId].clients.forEach((client) => {
-          // Exclude the sender from receiving their own message
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-              type: 'message',
-              nickname: ws.nickname,
-              message
-            }));
-          }
-        });
-      }
-    } else if (data.type === 'typing') {
-      const { roomId } = data;
+        if (chatRooms[roomId]) {
+          chatRooms[roomId].clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({
+                type: 'message',
+                nickname: ws.nickname,
+                message,
+              }));
+            }
+          });
+        }
+      } else if (data.type === 'typing') {
+        const { roomId, nickname } = data;
 
-      if (chatRooms[roomId]) {
-        chatRooms[roomId].clients.forEach((client) => {
-          // Exclude the sender from receiving the typing notification
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: 'typing', nickname: ws.nickname }));
-          }
-        });
+        if (chatRooms[roomId]) {
+          chatRooms[roomId].clients.forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({
+                type: 'typing',
+                nickname,
+              }));
+            }
+          });
+        }
+      } else if (data.type === 'stop-typing') {
+        const { roomId, nickname } = data;
+
+        if (chatRooms[roomId]) {
+          chatRooms[roomId].clients.forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({
+                type: 'stop-typing',
+                nickname,
+              }));
+            }
+          });
+        }
+      } else if (data.type === 'delete-room') {
+        const { roomId } = data;
+
+        if (chatRooms[roomId] && chatRooms[roomId].creator === ws.nickname) {
+          chatRooms[roomId].clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ type: 'session-ended' }));
+            }
+          });
+
+          delete chatRooms[roomId];
+          saveRoomsToFile();
+        } 
       }
+    } catch (error) {
+      console.error('Error processing message:', error.message);
+      ws.send(JSON.stringify({ type: 'error', message: 'Internal server error' }));
     }
   });
 
@@ -76,16 +133,28 @@ wss.on('connection', (ws) => {
     if (ws.roomId && chatRooms[ws.roomId]) {
       chatRooms[ws.roomId].clients = chatRooms[ws.roomId].clients.filter((client) => client !== ws);
 
-      // Clean up empty rooms
-      if (chatRooms[ws.roomId].clients.length === 0) {
-        delete chatRooms[ws.roomId];
-      }
+      broadcastOnlineUsers(ws.roomId);
     }
   });
 });
 
-// Start the server on the dynamic Render port
+// Broadcast online users to all clients in the room
+const broadcastOnlineUsers = (roomId) => {
+  if (chatRooms[roomId]) {
+    const onlineUsers = chatRooms[roomId].clients.map((client) => client.nickname);
+    chatRooms[roomId].clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          type: 'online-users',
+          users: onlineUsers,
+        }));
+      }
+    });
+  }
+};
+
+// Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
