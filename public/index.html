@@ -1,264 +1,517 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Private Chat.io</title>
-  <style>
-    /* Styling (same as before) */
-    body {
-      background-color: black;
-      color: lime;
-      font-family: "Courier New", Courier, monospace;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      margin: 0;
-    }
-    h1 {
-      margin: 20px 0;
-      text-shadow: 0 0 5px lime;
-    }
-    #user-manual ,#info{
-      background-color: rgb(238, 55, 55);
-      color: rgb(23, 23, 23);
-      
-      font-family: inherit;
-      font-size: 1rem;
-      padding: 10px;
-      margin: 5px;
-      outline: none;
-    }
-
-    #setup, #chat {
-      width: 80%;
-      max-width: 600px;
-      text-align: center;
-    }
-    input, button {
-      background-color: black;
-      color: lime;
-      border: 1px solid lime;
-      font-family: inherit;
-      font-size: 1rem;
-      padding: 10px;
-      margin: 5px;
-      outline: none;
-    }
-    button:hover {
-      background-color: lime;
-      color: black;
-    }
-    #chat {
-      display: none;
-    }
-    #messages {
-      border: 1px solid rgb(27, 28, 27);
-      background-color: black;
-      color: lime;
-      padding: 10px;
-      height: 300px;
-      overflow-y: scroll;
-      font-size: 0.9rem;
-      margin-bottom: 10px;
-    }
-    .message {
-      margin: 5px 0;
-    }
-    .timestamp {
-      font-size: 0.7rem;
-      color: rgb(202, 194, 194);
-    }
-    #typing {
-      font-size: 0.8rem;
-      color: rgb(240, 220, 8);
-      margin-top: -10px;
-    }
-    #online-users {
-      font-size: 0.9rem;
-      margin-bottom: 10px;
-    }
-  </style>
-</head>
-<body>
-  <div id="setup">
-    <h1>Private Chat.io By omez</h1>
-    <div> 
-    <button id="user-manual">User Manual</button>
-    <button id="info">Info</button>
-   </div>
-    <input id="nickname" placeholder="Your Nickname" />
-    <input id="roomId" placeholder="Room ID" />
-    <input id="password" type="password" placeholder="Password" />
-    <button id="create">Create Room</button>
-    <button id="join">Join Room</button>
-  </div>
-
-  <div id="chat">
-    <h1>We are in priavte space !!!</h1>
-    <div id="online-users">Online Users:</div>
-    <button id="end-session" style="display: none;">End Session</button>
-    <div id="messages"></div>
-    <div id="typing"></div>
-    <input id="message" placeholder="Type your message..." />
-    <button id="send">Send</button>
-  </div>
-
-  <script>
- const socket = new WebSocket('wss://private-chat-io.onrender.com');
-  
-    const setupDiv = document.getElementById('setup');
-    const chatDiv = document.getElementById('chat');
-    const messagesDiv = document.getElementById('messages');
-    const typingDiv = document.getElementById('typing');
-    const onlineUsersDiv = document.getElementById('online-users');
-    const messageInput = document.getElementById('message');
-    const nicknameInput = document.getElementById('nickname');
-    const roomIdInput = document.getElementById('roomId');
-    const passwordInput = document.getElementById('password');
-    const endSessionButton = document.getElementById('end-session');
-    const userManualButton = document.getElementById('user-manual');
-    const infoButton = document.getElementById('info');
-
-    let nickname = localStorage.getItem('nickname') || '';
-    let roomId = localStorage.getItem('roomId') || '';
-    let isCreator = localStorage.getItem('isCreator') === 'true';
-    let typingTimeout;
-  
-    // Handle page reload behavior
-    window.addEventListener('beforeunload', (event) => {
-      if (isCreator) {
-        // End session for creators
-        socket.send(JSON.stringify({ type: 'delete-room', roomId }));
-        localStorage.clear(); // Clear local storage
-      } else if (roomId) {
-        // Confirmation for joiners
-        event.preventDefault();
-        event.returnValue = 'Reloading will remove you from the chat room.';
-        return 'Reloading will remove you from the chat room.';
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Private Chat.io</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
       }
-    });
-
-    document.getElementById('create').onclick = () => {
-      nickname = nicknameInput.value.trim() || 'Anonymous';
-      roomId = roomIdInput.value.trim();
-      const password = passwordInput.value.trim();
-  
-      socket.send(JSON.stringify({ type: 'create-room', roomId, password, nickname }));
-      isCreator = true;
-  
-      // Store data in localStorage
-      localStorage.setItem('nickname', nickname);
-      localStorage.setItem('roomId', roomId);
-      localStorage.setItem('isCreator', 'true');
-    };
-  
-    document.getElementById('join').onclick = () => {
-      nickname = nicknameInput.value.trim() || 'Anonymous';
-      roomId = roomIdInput.value.trim();
-      const password = passwordInput.value.trim();
-  
-      socket.send(JSON.stringify({ type: 'join-room', roomId, password, nickname }));
-  
-      // Don't store joiner data in localStorage
-      localStorage.removeItem('isCreator');
-    };
-    // Show User Manual
-    userManualButton.onclick = () => {
-      alert(`
-        User Manual:
-        - To create a room, enter a Room ID and Password,
-          then click "Create Room".
-        - To join a room, enter the Room ID and Password provided 
-          by the creator, then click "Join Room".
-        - Type your messages in the input box and 
-          click "Send" to send a message.
-        - For the creator, click "End Session" to end the room session.
-        - Reloading will get u out of the chat room if you are a joiner.
-        - Reloading will delete the chatroom if you are a creator.
-      `);
-    };
-
-    // Show Info
-    infoButton.onclick = () => {
-      alert(`
-        Private Chat.io:
-        - A secure and private chat platform.
-        - Supports live messaging, user nicknames, and real-time updates.
-        - Developed with WebSockets for fast communication 
-        -  by Omesh Rabha.
-         
-      `);
-    };
-  
-    document.getElementById('send').onclick = () => {
-      const message = messageInput.value.trim();
-      if (message) {
-        socket.send(JSON.stringify({ type: 'message', roomId, message, nickname }));
-        messageInput.value = '';
+      body {
+        margin: 0;
+        font-family: "Poppins", sans-serif;
+        background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+        color: #ecf0f1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 40px 20px;
+        min-height: 100vh;
+        background-attachment: fixed;
       }
-    };
-
-    messageInput.oninput = () => {
-      socket.send(JSON.stringify({ type: 'typing', roomId, nickname }));
-    };
-
-    endSessionButton.onclick = () => {
-      if (isCreator) {
-        const shouldEndSession = confirm("Are you sure you want to end the session?");
-        if (shouldEndSession) {
-          socket.send(JSON.stringify({ type: 'delete-room', roomId }));
-          localStorage.clear(); // Clear local storage
-          alert('Session ended. Redirecting to the homepage...');
-          location.reload();
+      h1 {
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+        color: #00ffff;
+        text-shadow: 0 0 10px #00ffff80;
+      }
+      #setup,
+      #chat {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(8px);
+        border-radius: 16px;
+        padding: 30px 25px;
+        width: 100%;
+        max-width: 500px;
+        text-align: center;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+        animation: fadeIn 0.4s ease-in;
+      }
+      input,
+      button {
+        width: 100%;
+        padding: 12px;
+        margin: 10px 0;
+        border: none;
+        border-radius: 10px;
+        font-size: 1rem;
+        outline: none;
+        transition: all 0.2s ease;
+      }
+      input {
+        background: rgba(255, 255, 255, 0.08);
+        color: #ecf0f1;
+        border: 1px solid #00ffff30;
+      }
+      input::placeholder {
+        color: #ccc;
+      }
+      button {
+        background: #00ffff;
+        color: #001f3f;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #00d2ff;
+      }
+      #user-manual,
+      #info {
+        background: transparent;
+        border: 1px solid #00ffff40;
+        color: #ccc;
+        font-size: 0.9rem;
+      }
+      #messages {
+        background-color: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        padding: 15px;
+        height: 300px;
+        overflow-y: auto;
+        margin-bottom: 10px;
+        text-align: left;
+      }
+      .message {
+        max-width: 80%;
+        padding: 10px 14px;
+        margin: 8px 0;
+        border-radius: 12px;
+        word-wrap: break-word;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      }
+      .mine {
+        background-color: #00ffff20;
+        margin-left: auto;
+        text-align: right;
+      }
+      .other {
+        background-color: #ffffff10;
+        margin-right: auto;
+        text-align: left;
+      }
+      .timestamp {
+        font-size: 0.7rem;
+        color: #aaa;
+        display: block;
+        margin-top: 5px;
+      }
+      #typing {
+        font-size: 0.85rem;
+        color: #f1c40f;
+        margin-bottom: 10px;
+      }
+      #online-users {
+        font-size: 0.9rem;
+        margin-bottom: 15px;
+        color: #1abc9c;
+        font-weight: 500;
+      }
+      footer {
+        margin-top: 30px;
+        font-size: 0.7rem;
+        color: #bbb;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
         }
       }
-    };
-  
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-  
-      if (data.type === 'room-created') {
-        setupDiv.style.display = 'none';
-        chatDiv.style.display = 'block';
-        endSessionButton.style.display = 'block';
-        alert('Room created successfully! Share the Room ID and password.');
-      } else if (data.type === 'joined-room') {
-        setupDiv.style.display = 'none';
-        chatDiv.style.display = 'block';
-      } else if (data.type === 'message') {
-        displayMessage(`${data.nickname}: ${data.message}`, new Date().toLocaleTimeString());
-      } else if (data.type === 'typing') {
-        typingDiv.innerText = `${data.nickname} is typing...`;
-        clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => {
-          typingDiv.innerText = '';
-        }, 1000);
-      } else if (data.type === 'online-users') {
-        updateOnlineUsers(data.users);
-      } else if (data.type === 'session-ended') {
-        alert('The session has ended.');
-        localStorage.clear(); // Clear local storage
-        location.reload(); // Reload to reflect session ended
-      } else if (data.type === 'error') {
-        alert(data.message);
+      @media (max-width: 600px) {
+        #setup,
+        #chat {
+          padding: 20px;
+        }
       }
-    };
-  
-    function displayMessage(message, timestamp) {
-      const messageEl = document.createElement('div');
-      messageEl.className = 'message';
-      messageEl.innerHTML = `${message} <span class="timestamp">[${timestamp}]</span>`;
-      messagesDiv.appendChild(messageEl);
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    }
-  
-    function updateOnlineUsers(users) {
-      onlineUsersDiv.innerText = `Online Users: ${users.join(', ')}`;
-    }
-  </script>
-  <footer style="margin: 40px; font: 0.5em ;">Developed by <code>OR</code></footer>
-</body>
+
+      /* Modal */
+      #modal {
+        display: none;
+        position: fixed;
+        z-index: 9999;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        align-items: center;
+        justify-content: center;
+      }
+      #modal .modal-content {
+        background: #1c1c1c;
+        padding: 20px 30px;
+        border-radius: 10px;
+        max-width: 90%;
+        max-height: 80%;
+        overflow: auto;
+        box-shadow: 0 0 20px #00ffff90;
+        color: #fff;
+      }
+      #modal h2 {
+        color: #00ffff;
+        margin-top: 0;
+      }
+      #modal button {
+        margin-top: 20px;
+        background: #00ffff;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="setup">
+      <h1>Private Chat.io</h1>
+      <button id="user-manual">User Manual</button>
+      <button id="info">Info</button>
+      <input id="nickname" placeholder="Your Nickname" />
+      <input id="roomId" placeholder="Room ID" />
+      <input id="password" type="password" placeholder="Password" />
+      <button id="create">Create Room</button>
+      <button id="join">Join Room</button>
+    </div>
+
+    <div id="chat" style="display: none">
+      <h1>Private Space</h1>
+      <div id="online-users">Online Users:</div>
+      <button id="end-session" style="display: none; margin-bottom: 10px">
+        End Session
+      </button>
+      <button id="share-room" style="margin-bottom: 10px">
+        Share Room Link
+      </button>
+      <div id="messages"></div>
+      <div id="typing"></div>
+      <input id="message" placeholder="Type your message..." />
+      <button id="send">Send</button>
+    </div>
+
+    <footer>Developed by <code>OR</code></footer>
+
+    <!-- Modal structure -->
+    <div id="modal">
+      <div class="modal-content">
+        <h2 id="modal-title"></h2>
+        <p id="modal-content-text" style="white-space: pre-line"></p>
+        <button onclick="closeModal()">Close</button>
+      </div>
+    </div>
+
+    <script>
+      let socket;
+      let reconnectInterval = null;
+      let typingTimeout;
+      let nickname = localStorage.getItem("nickname") || "";
+      let roomId = localStorage.getItem("roomId") || "";
+      let isCreator = localStorage.getItem("isCreator") === "true";
+
+      const setupDiv = document.getElementById("setup");
+      const chatDiv = document.getElementById("chat");
+      const messagesDiv = document.getElementById("messages");
+      const typingDiv = document.getElementById("typing");
+      const onlineUsersDiv = document.getElementById("online-users");
+      const messageInput = document.getElementById("message");
+      const nicknameInput = document.getElementById("nickname");
+      const roomIdInput = document.getElementById("roomId");
+      const passwordInput = document.getElementById("password");
+      const endSessionButton = document.getElementById("end-session");
+      const userManualButton = document.getElementById("user-manual");
+      const infoButton = document.getElementById("info");
+      const shareRoomButton = document.getElementById("share-room");
+
+      function showModal(title, content) {
+        document.getElementById("modal-title").innerText = title;
+        document.getElementById("modal-content-text").innerText = content;
+        document.getElementById("modal").style.display = "flex";
+      }
+
+      function closeModal() {
+        document.getElementById("modal").style.display = "none";
+      }
+
+      function showNotice(msg) {
+        showModal("Notice", msg);
+      }
+
+      function showError(msg) {
+        showModal("Error", msg);
+      }
+
+      userManualButton.onclick = () => {
+        showModal(
+          "User Manual",
+          `• To create a room, enter a Room ID and Password, then click "Create Room".
+• To join a room, enter the Room ID and Password provided by the creator, then click "Join Room".
+• Type your messages and click "Send" to chat.
+• The room creator can end the session with "End Session".
+• Reloading removes you from the room.`
+        );
+      };
+
+      infoButton.onclick = () => {
+        showModal(
+          "Private Chat.io Info",
+          `• A secure, private WebSocket-based chat.
+• Supports live messaging, nicknames, and room-based access.
+• Designed for privacy and simplicity.`
+        );
+      };
+
+      document.getElementById("create").onclick = () => {
+        nickname = nicknameInput.value.trim() || "Anonymous";
+        roomId = roomIdInput.value.trim();
+        const password = passwordInput.value.trim();
+        if (!roomId) return showError("Please enter a Room ID.");
+        socket.send(
+          JSON.stringify({ type: "create-room", roomId, password, nickname })
+        );
+        isCreator = true;
+        localStorage.setItem("nickname", nickname);
+        localStorage.setItem("roomId", roomId);
+        localStorage.setItem("isCreator", "true");
+      };
+
+      document.getElementById("join").onclick = () => {
+        nickname = nicknameInput.value.trim() || "Anonymous";
+        roomId = roomIdInput.value.trim();
+        const password = passwordInput.value.trim();
+        if (!roomId) return showError("Please enter a Room ID.");
+        socket.send(
+          JSON.stringify({ type: "join-room", roomId, password, nickname })
+        );
+        isCreator = false;
+        localStorage.setItem("nickname", nickname);
+        localStorage.setItem("roomId", roomId);
+        localStorage.removeItem("isCreator");
+      };
+
+      endSessionButton.onclick = () => {
+        showModal(
+          "End Session?",
+          "Do you really want to end the session?\n(This will disconnect everyone.)"
+        );
+        const closeBtn = document.querySelector("#modal button");
+        const originalHandler = closeBtn.onclick;
+        closeBtn.innerText = "Yes, End It";
+        closeBtn.onclick = () => {
+          if (isCreator) {
+            socket.send(JSON.stringify({ type: "delete-room", roomId }));
+            localStorage.clear();
+            showNotice("Session ended. Reloading...");
+            setTimeout(() => location.reload(), 1500);
+          }
+          closeBtn.onclick = originalHandler;
+          closeModal();
+        };
+      };
+
+      shareRoomButton.onclick = () => {
+        const room = roomIdInput.value.trim();
+        const pass = passwordInput.value.trim();
+        if (!room) return showError("Please enter a Room ID to share.");
+        if (!pass) return showError("Please enter the password to include it.");
+
+        const shareData = {
+          title: "Join my Private Chat Room",
+          text: `Join my chat room\nRoom ID: ${room}\nPassword: ${pass}`,
+          url: `${window.location.origin}${
+            window.location.pathname
+          }?roomId=${encodeURIComponent(room)}&password=${encodeURIComponent(
+            pass
+          )}`,
+        };
+
+        if (navigator.share) {
+          navigator
+            .share(shareData)
+            .catch((error) => showError("Error sharing: " + error));
+        } else {
+          copyToClipboard(`${shareData.text}\nLink: ${shareData.url}`);
+          showNotice("Room info copied to clipboard!");
+        }
+      };
+
+      function copyToClipboard(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard
+            .writeText(text)
+            .catch((err) => console.error(err));
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.style.position = "fixed";
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        }
+      }
+
+      document.getElementById("send").onclick = () => {
+        const message = messageInput.value.trim();
+        if (message && socket.readyState === WebSocket.OPEN) {
+          socket.send(
+            JSON.stringify({ type: "message", roomId, message, nickname })
+          );
+          messageInput.value = "";
+        }
+      };
+
+      messageInput.oninput = () => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "typing", roomId, nickname }));
+        }
+      };
+
+      function displayMessage(message, timestamp, isMine) {
+        const msg = document.createElement("div");
+        msg.className = `message ${isMine ? "mine" : "other"}`;
+        msg.innerHTML = `${message}<span class="timestamp">[${timestamp}]</span>`;
+        messagesDiv.appendChild(msg);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
+      function updateOnlineUsers(users) {
+        onlineUsersDiv.innerText = `Online Users: ${users.join(", ")}`;
+      }
+
+      function connect() {
+        socket = new WebSocket("wss://private-chat-io.onrender.com");
+
+        socket.onopen = () => {
+          if (reconnectInterval) clearInterval(reconnectInterval);
+          if (isCreator && roomId && nickname) {
+            socket.send(
+              JSON.stringify({
+                type: "create-room",
+                roomId,
+                password: passwordInput.value.trim(),
+                nickname,
+              })
+            );
+          } else if (roomId && nickname) {
+            socket.send(
+              JSON.stringify({
+                type: "join-room",
+                roomId,
+                password: passwordInput.value.trim(),
+                nickname,
+              })
+            );
+          }
+        };
+
+        socket.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === "room-created") {
+            setupDiv.style.display = "none";
+            chatDiv.style.display = "block";
+            endSessionButton.style.display = "block";
+            showNotice("Room created! Share the Room ID and password.");
+          } else if (data.type === "joined-room") {
+            setupDiv.style.display = "none";
+            chatDiv.style.display = "block";
+          } else if (data.type === "message") {
+            const mine = data.nickname === nickname;
+            displayMessage(
+              `${data.nickname}: ${data.message}`,
+              new Date().toLocaleTimeString(),
+              mine
+            );
+          } else if (data.type === "typing") {
+            typingDiv.innerText = `${data.nickname} is typing...`;
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => (typingDiv.innerText = ""), 1000);
+          } else if (data.type === "online-users") {
+            updateOnlineUsers(data.users);
+          } else if (data.type === "session-ended") {
+            showNotice("The session has ended. Redirecting to main page...");
+            localStorage.clear();
+
+            const url = new URL(window.location.href);
+            if (
+              url.searchParams.has("roomId") ||
+              url.searchParams.has("password")
+            ) {
+              setTimeout(() => {
+                window.location.href = url.origin + url.pathname;
+              }, 2000);
+            } else {
+              setTimeout(() => location.reload(), 2000);
+            }
+          } else if (data.type === "error") {
+            showError(data.message);
+          }
+        };
+
+        socket.onclose = () => {
+          if (!reconnectInterval) {
+            reconnectInterval = setInterval(connect, 3000);
+          }
+        };
+
+        socket.onerror = (err) => {
+          console.error(err);
+          socket.close();
+        };
+      }
+
+      connect();
+
+    window.addEventListener("beforeunload", (event) => {
+  if (isCreator) {
+    socket.send(JSON.stringify({ type: "delete-room", roomId }));
+    localStorage.clear();
+  } else if (roomId && !window.location.search.includes("roomId")) {
+    // Only show alert if NOT on join (shared) page with roomId param
+    event.preventDefault();
+    event.returnValue = "Reloading will remove you from the chat room.";
+    return "Reloading will remove you from the chat room.";
+  }
+});
+
+
+      document.addEventListener("visibilitychange", () => {
+        if (
+          document.visibilityState === "visible" &&
+          (!socket || socket.readyState !== WebSocket.OPEN)
+        ) {
+          connect();
+        }
+      });
+
+      const params = new URLSearchParams(window.location.search);
+      const prefillRoomId = params.get("roomId");
+      const prefillPassword = params.get("password");
+      if (prefillRoomId && prefillPassword !== null) {
+        roomIdInput.value = prefillRoomId;
+        passwordInput.value = prefillPassword;
+        roomIdInput.style.display = "none";
+        passwordInput.style.display = "none";
+        document.getElementById("create").style.display = "none";
+      }
+    </script>
+  </body>
 </html>
